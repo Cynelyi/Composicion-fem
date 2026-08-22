@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Check-in diario</title>
+<style>
+  :root{
+    --durazno: #e0895a;
+    --durazno-suave: #fbe6d8;
+    --lavanda: #8a6fb0;
+    --fondo: #fdf7f1;
+    --tarjeta: #ffffff;
+    --texto: #332a24;
+    --texto-suave: #7a6b60;
+    --borde: #f1ddc9;
+    --verde: #4c8c6b;
+    --ambar: #b8863b;
+    --rojo: #b8514f;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--fondo);
+    color:var(--texto);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5;
+    padding:24px 16px 60px;
+  }
+  .wrap{max-width:640px;margin:0 auto;}
+  header{margin-bottom:24px;}
+  h1{font-size:1.5rem;margin:0 0 4px;color:var(--texto);}
+  .subtitulo{color:var(--texto-suave);font-size:0.95rem;margin:0;}
+  form{
+    background:var(--tarjeta);
+    border:1px solid var(--borde);
+    border-radius:16px;
+    padding:20px;
+    margin-bottom:24px;
+  }
+  fieldset{border:none;padding:0;margin:0 0 18px;}
+  legend{font-weight:600;font-size:0.85rem;color:var(--durazno);text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px;padding:0;}
+  .fila{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+    margin-bottom:12px;
+  }
+  .campo{margin-bottom:12px;}
+  .campo.full{grid-column:1/-1;}
+  label{display:block;font-size:0.85rem;color:var(--texto-suave);margin-bottom:4px;}
+  input[type="number"], input[type="text"], select{
+    width:100%;
+    padding:10px 12px;
+    border:1px solid var(--borde);
+    border-radius:10px;
+    font-size:1rem;
+    background:#fff;
+    color:var(--texto);
+    font-family:inherit;
+  }
+  input:focus, select:focus{outline:2px solid var(--lavanda);outline-offset:1px;}
+  .grupo-botones{display:flex;gap:8px;flex-wrap:wrap;}
+  .opcion{
+    flex:1 1 auto;
+    text-align:center;
+    padding:9px 10px;
+    border:1px solid var(--borde);
+    border-radius:10px;
+    cursor:pointer;
+    font-size:0.9rem;
+    color:var(--texto-suave);
+    user-select:none;
+    background:#fff;
+  }
+  .opcion.activo{
+    background:var(--durazno);
+    border-color:var(--durazno);
+    color:#fff;
+    font-weight:600;
+  }
+  button.principal{
+    width:100%;
+    padding:14px;
+    background:var(--durazno);
+    color:#fff;
+    border:none;
+    border-radius:12px;
+    font-size:1rem;
+    font-weight:600;
+    cursor:pointer;
+    margin-top:6px;
+  }
+  button.principal:hover{background:#c96f3f;}
+
+  #resultado{display:none;}
+  .tarjeta-resultado{
+    background:var(--tarjeta);
+    border:1px solid var(--borde);
+    border-radius:16px;
+    padding:20px;
+    margin-bottom:16px;
+    border-left:5px solid var(--durazno);
+  }
+  .tarjeta-resultado.hacer{border-left-color:var(--verde);}
+  .tarjeta-resultado.no-hacer{border-left-color:var(--rojo);}
+  .tarjeta-resultado h2{
+    font-size:1rem;
+    margin:0 0 10px;
+    text-transform:uppercase;
+    letter-spacing:.03em;
+  }
+  .tarjeta-resultado ul{margin:0;padding-left:18px;}
+  .tarjeta-resultado li{margin-bottom:8px;}
+  .tarjeta-resultado p{margin:0 0 8px;}
+  .tarjeta-resultado p:last-child{margin-bottom:0;}
+  .aviso{
+    font-size:0.82rem;
+    color:var(--texto-suave);
+    text-align:center;
+    margin-top:20px;
+  }
+  .badge-fase{
+    display:inline-block;
+    background:var(--durazno-suave);
+    color:var(--durazno);
+    padding:2px 10px;
+    border-radius:999px;
+    font-size:0.78rem;
+    font-weight:600;
+    margin-left:6px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Check-in diario</h1>
+    <p class="subtitulo">Ciclo, recuperación, actividad y objetivo — para saber qué hacer hoy.</p>
+  </header>
+
+  <form id="form-checkin">
+
+    <fieldset>
+      <legend>Ciclo y cuerpo</legend>
+      <div class="fila">
+        <div class="campo">
+          <label for="dia-ciclo">Día del ciclo</label>
+          <input type="number" id="dia-ciclo" min="1" max="45" value="1" required>
+        </div>
+        <div class="campo">
+          <label for="grasa">% grasa corporal (opcional)</label>
+          <input type="number" id="grasa" step="0.1" placeholder="ej. 24.5">
+        </div>
+      </div>
+      <div class="fila">
+        <div class="campo">
+          <label for="peso-hoy">Peso de hoy</label>
+          <input type="number" id="peso-hoy" step="0.1" required>
+        </div>
+        <div class="campo">
+          <label for="peso-prom">Peso promedio (últimos 7 días)</label>
+          <input type="number" id="peso-prom" step="0.1" required>
+        </div>
+      </div>
+      <p style="font-size:0.78rem;color:var(--texto-suave);margin:-4px 0 0;">Usa la misma unidad en ambos (kg o lb), no importa cuál mientras sea consistente. Asumimos un ciclo típico de 28 días para estimar la fase y el próximo período.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Actividad</legend>
+      <div class="campo">
+        <label for="pasos">Pasos de hoy (hasta el momento)</label>
+        <input type="number" id="pasos" min="0" required>
+      </div>
+      <div class="fila">
+        <div class="campo">
+          <label for="entreno-hoy">Entrenamiento de hoy (plan)</label>
+          <input type="text" id="entreno-hoy" placeholder="ej. pierna, empuje, descanso">
+        </div>
+        <div class="campo">
+          <label for="entreno-ayer">Entrenamiento de ayer</label>
+          <input type="text" id="entreno-ayer" placeholder="ej. pierna, cardio, descanso">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Cómo te sientes</legend>
+      <div class="campo">
+        <label>Energía</label>
+        <div class="grupo-botones" data-grupo="energia">
+          <div class="opcion" data-valor="Baja">Baja</div>
+          <div class="opcion activo" data-valor="Normal">Normal</div>
+          <div class="opcion" data-valor="Alta">Alta</div>
+        </div>
+      </div>
+      <div class="campo">
+        <label>¿Tienes alguna molestia?</label>
+        <div class="grupo-botones" data-grupo="dolor">
+          <div class="opcion activo" data-valor="Ninguna">Ninguna</div>
+          <div class="opcion" data-valor="Leve">Leve</div>
+          <div class="opcion" data-valor="Moderada">Moderada</div>
+          <div class="opcion" data-valor="Alta">Alta</div>
+        </div>
+      </div>
+      <div class="campo" id="campo-zona" style="display:none;">
+        <label>¿Dónde?</label>
+        <div class="grupo-botones" data-grupo="zona">
+          <div class="opcion" data-valor="Cadera">Cadera</div>
+          <div class="opcion" data-valor="Rodilla">Rodilla</div>
+          <div class="opcion" data-valor="Espalda">Espalda</div>
+          <div class="opcion" data-valor="Tobillo/pie">Tobillo/pie</div>
+          <div class="opcion" data-valor="Hombro">Hombro</div>
+          <div class="opcion" data-valor="Cuello">Cuello</div>
+          <div class="opcion" data-valor="Otra">Otra</div>
+        </div>
+      </div>
+      <div class="campo" id="campo-afecta" style="display:none;">
+        <label>¿La molestia afecta tu movimiento?</label>
+        <div class="grupo-botones" data-grupo="afecta">
+          <div class="opcion" data-valor="No">No</div>
+          <div class="opcion" data-valor="Un poco">Un poco</div>
+          <div class="opcion" data-valor="Sí">Sí</div>
+        </div>
+      </div>
+      <div class="campo">
+        <label>Sueño</label>
+        <div class="grupo-botones" data-grupo="sueno">
+          <div class="opcion" data-valor="Bueno">Bueno</div>
+          <div class="opcion activo" data-valor="Normal">Normal</div>
+          <div class="opcion" data-valor="Malo">Malo</div>
+        </div>
+      </div>
+      <div class="campo">
+        <label>Hambre</label>
+        <div class="grupo-botones" data-grupo="hambre">
+          <div class="opcion" data-valor="Baja">Baja</div>
+          <div class="opcion activo" data-valor="Normal">Normal</div>
+          <div class="opcion" data-valor="Alta">Alta</div>
+        </div>
+      </div>
+      <div class="campo">
+        <label>Estrés</label>
+        <div class="grupo-botones" data-grupo="estres">
+          <div class="opcion" data-valor="Bajo">Bajo</div>
+          <div class="opcion activo" data-valor="Normal">Normal</div>
+          <div class="opcion" data-valor="Alto">Alto</div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Objetivo</legend>
+      <div class="campo">
+        <select id="objetivo">
+          <option value="Pérdida de grasa">Pérdida de grasa</option>
+          <option value="Recomposición">Recomposición</option>
+          <option value="Mantenimiento">Mantenimiento</option>
+          <option value="Salud">Salud</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <button type="submit" class="principal">Ver mi resumen de hoy</button>
+  </form>
+
+  <div id="resultado">
+    <div class="tarjeta-resultado">
+      <h2>Qué está pasando <span id="badge-fase" class="badge-fase"></span></h2>
+      <div id="txt-pasando"></div>
+      <p id="txt-proximo" style="font-size:0.85rem;color:var(--texto-suave);"></p>
+    </div>
+    <div class="tarjeta-resultado hacer">
+      <h2>Qué hacer hoy</h2>
+      <ul id="lista-hacer"></ul>
+    </div>
+    <div class="tarjeta-resultado no-hacer">
+      <h2>Qué no hacer</h2>
+      <ul id="lista-no-hacer"></ul>
+    </div>
+  </div>
+
+  <p class="aviso">Esta herramienta da orientación general basada en reglas simples, no es consejo médico. Si el dolor es intenso o persiste varios días, consulta a un profesional.</p>
+
+</div>
+
+<script>
+// --- Selección de botones tipo "chip" ---
+document.querySelectorAll('.grupo-botones').forEach(function(grupo){
+  grupo.addEventListener('click', function(e){
+    var opcion = e.target.closest('.opcion');
+    if(!opcion) return;
+    grupo.querySelectorAll('.opcion').forEach(function(o){ o.classList.remove('activo'); });
+    opcion.classList.add('activo');
+
+    if (grupo.dataset.grupo === 'dolor') {
+      var hayMolestia = opcion.dataset.valor !== 'Ninguna';
+      document.getElementById('campo-zona').style.display = hayMolestia ? 'block' : 'none';
+      document.getElementById('campo-afecta').style.display = hayMolestia ? 'block' : 'none';
+      if (!hayMolestia) {
+        document.querySelectorAll('.grupo-botones[data-grupo="zona"] .opcion, .grupo-botones[data-grupo="afecta"] .opcion')
+          .forEach(function(o){ o.classList.remove('activo'); });
+      }
+    }
+  });
+});
+
+function valorGrupo(nombre){
+  var activo = document.querySelector('.grupo-botones[data-grupo="'+nombre+'"] .opcion.activo');
+  return activo ? activo.dataset.valor : null;
+}
+
+// --- Fase del ciclo (modelo simple de 28 días) ---
+function faseCiclo(dia){
+  if (dia <= 5)  return {id:'menstrual',  nombre:'Menstrual'};
+  if (dia <= 13) return {id:'folicular',  nombre:'Folicular'};
+  if (dia <= 16) return {id:'ovulacion',  nombre:'Ovulación'};
+  return {id:'lutea', nombre:'Lútea'};
+}
+
+// --- Próximo período esperado (a partir del día del ciclo + fecha de hoy) ---
+var DURACION_CICLO_ASUMIDA = 28;
+
+function calcularProximoPeriodo(diaCiclo){
+  var hoy = new Date();
+  hoy.setHours(0,0,0,0);
+  var inicioUltimoPeriodo = new Date(hoy);
+  inicioUltimoPeriodo.setDate(hoy.getDate() - (diaCiclo - 1));
+  var proximo = new Date(inicioUltimoPeriodo);
+  proximo.setDate(inicioUltimoPeriodo.getDate() + DURACION_CICLO_ASUMIDA);
+  var diasRestantes = Math.round((proximo - hoy) / (1000 * 60 * 60 * 24));
+  return {fecha: proximo, diasRestantes: diasRestantes};
+}
+
+function textoProximoPeriodo(diaCiclo){
+  var r = calcularProximoPeriodo(diaCiclo);
+  var fechaTexto = r.fecha.toLocaleDateString('es', {day:'numeric', month:'long', year:'numeric'});
+  if (r.diasRestantes < 0) {
+    return 'Según un ciclo de ' + DURACION_CICLO_ASUMIDA + ' días, tu período se esperaba el ' + fechaTexto + ' (hace ' + Math.abs(r.diasRestantes) + ' días). Si tu ciclo suele ser más largo, esto es normal — si llevas varios días de retraso inusual para ti, tenlo en cuenta.';
+  }
+  if (r.diasRestantes === 0) {
+    return 'Según un ciclo de ' + DURACION_CICLO_ASUMIDA + ' días, tu período se espera hoy, ' + fechaTexto + '.';
+  }
+  return 'Próximo período esperado: ' + fechaTexto + ' (en ' + r.diasRestantes + ' día' + (r.diasRestantes === 1 ? '' : 's') + ', asumiendo un ciclo de ' + DURACION_CICLO_ASUMIDA + ' días).';
+}
+
+// --- Interpretación del cambio de peso ---
+function interpretarPeso(pesoHoy, pesoProm, fase){
+  var diff = Math.round((pesoHoy - pesoProm) * 10) / 10;
+  var abs = Math.abs(diff);
+
+  if (abs < 0.3) {
+    return 'Tu peso de hoy (' + pesoHoy + ') está prácticamente igual a tu promedio reciente (' + pesoProm + '). Sin cambios relevantes.';
+  }
+  if (diff > 0) {
+    if (fase.id === 'lutea' || fase.id === 'menstrual') {
+      return 'Subiste ' + abs + ' respecto a tu promedio. En fase ' + fase.nombre.toLowerCase() + ' esto suele ser retención de líquidos, no grasa — no hace falta reaccionar todavía.';
+    }
+    return 'Subiste ' + abs + ' respecto a tu promedio. En fase ' + fase.nombre.toLowerCase() + ' hay menos retención hormonal, así que vale la pena seguir observando los próximos días antes de sacar conclusiones.';
+  }
+  return 'Bajaste ' + abs + ' respecto a tu promedio. Es un dato normal día a día — no saques conclusiones de una sola medición.';
+}
+
+// --- Generación del plan de hoy ---
+function generarPlan(datos){
+  var hacer = [];
+  var noHacer = [];
+  var recorte = false;
+  var motivos = [];
+
+  if (datos.dolor === 'Alta')    { recorte = true; motivos.push('molestia alta'); }
+  if (datos.dolor === 'Moderada'){ recorte = true; motivos.push('molestia moderada'); }
+  if (datos.dolor === 'Leve' && datos.afecta === 'Sí') { recorte = true; motivos.push('molestia leve que sí afecta el movimiento'); }
+  if (datos.energia === 'Baja' && datos.sueno === 'Malo') { recorte = true; motivos.push('poca energía y mal descanso'); }
+  if (datos.fase.id === 'menstrual' && datos.energia === 'Baja') { recorte = true; motivos.push('inicio del ciclo con energía baja'); }
+  if (datos.estres === 'Alto') { recorte = true; motivos.push('estrés alto'); }
+
+  if (recorte) {
+    hacer.push('Prioriza recuperación: movilidad, estiramientos suaves o una caminata corta.');
+    hacer.push('Mantén el movimiento ligero — no es necesario parar del todo, pero baja la intensidad de "' + (datos.entrenoHoy || 'tu plan de hoy') + '".');
+    noHacer.push('No fuerces el entrenamiento planeado solo porque estaba en el calendario (' + motivos.join(', ') + ').');
+    if (datos.dolor === 'Alta' || datos.dolor === 'Moderada' || (datos.dolor === 'Leve' && datos.afecta === 'Sí')) {
+      var zonaTexto = datos.zona ? datos.zona.toLowerCase() : 'la zona con molestia';
+      noHacer.push('No cargues peso ni entrenes directamente sobre ' + zonaTexto + '.');
+      if (datos.afecta === 'Sí') {
+        noHacer.push('No ignores que la molestia te está afectando el movimiento — si no mejora en unos días, consulta a un profesional.');
+      }
+    }
+  } else {
+    if (datos.entrenoAyer && datos.entrenoHoy &&
+        datos.entrenoAyer.trim().toLowerCase() === datos.entrenoHoy.trim().toLowerCase()) {
+      hacer.push('Ayer y hoy coinciden en "' + datos.entrenoHoy + '". Si no hay dolor ni fatiga puedes mantenerlo, pero baja un poco el volumen para dar tiempo a recuperar.');
+    } else {
+      hacer.push('Puedes seguir con el plan de hoy: ' + (datos.entrenoHoy || 'según tu rutina') + '.');
+    }
+    if (datos.fase.id === 'folicular' || datos.fase.id === 'ovulacion') {
+      hacer.push('Fase ' + datos.fase.nombre.toLowerCase() + ': buen momento para exigirte un poco más si el cuerpo responde bien.');
+    }
+    if (datos.fase.id === 'lutea') {
+      hacer.push('Fase lútea: entrena con normalidad pero escucha señales de fatiga — no es el mejor momento para forzar récords.');
+    }
+    if (datos.fase.id === 'ovulacion') {
+      noHacer.push('No descuides la técnica: hay más laxitud articular en estos días.');
+    }
+    if (datos.dolor === 'Leve') {
+      var zonaLeve = datos.zona ? datos.zona.toLowerCase() : 'la zona';
+      hacer.push('Tienes una molestia leve en ' + zonaLeve + ' que por ahora no te limita el movimiento — entrena con normalidad pero mantente atenta a cómo evoluciona.');
+    }
+  }
+
+  if (datos.pasos >= 8000) {
+    hacer.push('Llevas ' + datos.pasos.toLocaleString('es') + ' pasos hoy — buen nivel de actividad general, no necesitas forzar más volumen.');
+  }
+
+  if (datos.estres === 'Alto') {
+    noHacer.push('No agregues más estrés con un entrenamiento de muy alta intensidad hoy — el cuerpo ya está manejando suficiente carga.');
+  }
+
+  if (datos.hambre === 'Alta') {
+    if (datos.fase.id === 'lutea' || datos.fase.id === 'menstrual') {
+      hacer.push('Más hambre de lo normal es común en fase ' + datos.fase.nombre.toLowerCase() + ' por cambios hormonales; prioriza proteína y fibra para sentirte satisfecha.');
+    } else {
+      hacer.push('Si el hambre está más alta de lo normal, prioriza proteína y fibra en tus comidas de hoy.');
+    }
+    if (datos.objetivo === 'Pérdida de grasa') {
+      noHacer.push('No te saltes comidas para "compensar" el hambre de hoy — sostienes mejor el déficit comiendo suficiente proteína y fibra que restringiendo de más.');
+    }
+  } else if (datos.hambre === 'Baja') {
+    hacer.push('Aunque el hambre esté baja, no te saltes comidas por completo — sigue tu plan de alimentación.');
+  }
+
+  if (datos.objetivo === 'Pérdida de grasa') {
+    hacer.push('Mantén tus pasos aunque el entrenamiento de hoy sea suave.');
+    noHacer.push('No uses el número de la báscula de hoy para restringir más la comida.');
+  } else if (datos.objetivo === 'Recomposición') {
+    noHacer.push('No saltes proteína aunque el entrenamiento de hoy sea ligero.');
+  } else if (datos.objetivo === 'Mantenimiento') {
+    hacer.push('Prioriza la consistencia por encima de la intensidad puntual.');
+  } else if (datos.objetivo === 'Salud') {
+    hacer.push('El objetivo es sentirte bien, no rendir al máximo — ajusta según cómo te sientas hoy.');
+  }
+
+  noHacer.push('No compares el peso de hoy con el de ayer como si fuera grasa ganada o perdida en 24 horas.');
+  if (datos.grasa) {
+    noHacer.push('No sobreinterpretes el % de grasa de un solo día — las básculas de bioimpedancia varían con hidratación y hora del día.');
+  }
+
+  return {hacer: hacer, noHacer: noHacer};
+}
+
+document.getElementById('form-checkin').addEventListener('submit', function(e){
+  e.preventDefault();
+
+  var diaCiclo = parseInt(document.getElementById('dia-ciclo').value, 10);
+  var pesoHoy  = parseFloat(document.getElementById('peso-hoy').value);
+  var pesoProm = parseFloat(document.getElementById('peso-prom').value);
+  var grasaVal = document.getElementById('grasa').value;
+  var grasa    = grasaVal !== '' ? parseFloat(grasaVal) : null;
+  var pasos    = parseInt(document.getElementById('pasos').value, 10) || 0;
+  var entrenoHoy  = document.getElementById('entreno-hoy').value.trim();
+  var entrenoAyer = document.getElementById('entreno-ayer').value.trim();
+  var objetivo = document.getElementById('objetivo').value;
+
+  var energia = valorGrupo('energia');
+  var dolor   = valorGrupo('dolor');
+  var zona    = dolor !== 'Ninguna' ? valorGrupo('zona')   : null;
+  var afecta  = dolor !== 'Ninguna' ? valorGrupo('afecta') : null;
+  var sueno   = valorGrupo('sueno');
+  var hambre  = valorGrupo('hambre');
+  var estres  = valorGrupo('estres');
+
+  var fase = faseCiclo(diaCiclo);
+
+  var datos = {
+    diaCiclo: diaCiclo, pesoHoy: pesoHoy, pesoProm: pesoProm, grasa: grasa,
+    pasos: pasos, entrenoHoy: entrenoHoy, entrenoAyer: entrenoAyer,
+    energia: energia, dolor: dolor, zona: zona, afecta: afecta, sueno: sueno,
+    hambre: hambre, estres: estres, objetivo: objetivo, fase: fase
+  };
+
+  // --- Qué está pasando ---
+  var parrafos = [];
+  parrafos.push('<p>' + interpretarPeso(pesoHoy, pesoProm, fase) + '</p>');
+
+  var resumenActividad = 'Día ' + diaCiclo + ' del ciclo (fase ' + fase.nombre.toLowerCase() + '). ';
+  resumenActividad += 'Ayer: ' + (entrenoAyer || 'sin registro') + '. Hoy llevas ' + pasos.toLocaleString('es') + ' pasos.';
+  parrafos.push('<p>' + resumenActividad + '</p>');
+
+  if (dolor !== 'Ninguna') {
+    var zonaTxt   = zona   || 'sin especificar';
+    var afectaTxt = afecta || 'sin especificar';
+    parrafos.push('<p>Hoy reportas una molestia de nivel <strong>' + dolor.toLowerCase() + '</strong> en <strong>' + zonaTxt.toLowerCase() + '</strong>. ¿Afecta tu movimiento? ' + afectaTxt.toLowerCase() + '. Energía ' + energia.toLowerCase() + ', sueño ' + sueno.toLowerCase() + ', hambre ' + hambre.toLowerCase() + ' y estrés ' + estres.toLowerCase() + '.</p>');
+  } else {
+    parrafos.push('<p>Sin molestias reportadas. Energía ' + energia.toLowerCase() + ', sueño ' + sueno.toLowerCase() + ', hambre ' + hambre.toLowerCase() + ' y estrés ' + estres.toLowerCase() + '.</p>');
+  }
+
+  document.getElementById('txt-pasando').innerHTML = parrafos.join('');
+  document.getElementById('badge-fase').textContent = fase.nombre;
+  document.getElementById('txt-proximo').textContent = textoProximoPeriodo(diaCiclo);
+
+  // --- Plan ---
+  var plan = generarPlan(datos);
+
+  var listaHacer = document.getElementById('lista-hacer');
+  listaHacer.innerHTML = plan.hacer.map(function(t){ return '<li>' + t + '</li>'; }).join('');
+
+  var listaNoHacer = document.getElementById('lista-no-hacer');
+  listaNoHacer.innerHTML = plan.noHacer.map(function(t){ return '<li>' + t + '</li>'; }).join('');
+
+  document.getElementById('resultado').style.display = 'block';
+  document.getElementById('resultado').scrollIntoView({behavior:'smooth', block:'start'});
+});
+</script>
+
+</body>
+</html>
