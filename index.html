@@ -150,21 +150,21 @@
           <input type="number" id="dia-ciclo" min="1" max="45" value="1" required>
         </div>
         <div class="campo">
-          <label for="grasa">% grasa corporal (opcional)</label>
-          <input type="number" id="grasa" step="0.1" placeholder="ej. 24.5">
+          <label for="peso-hoy">Peso actual (opcional)</label>
+          <input type="number" id="peso-hoy" step="0.1" placeholder="ej. 61.2">
         </div>
       </div>
       <div class="fila">
         <div class="campo">
-          <label for="peso-hoy">Peso de hoy</label>
-          <input type="number" id="peso-hoy" step="0.1" required>
+          <label for="grasa">% grasa corporal (opcional)</label>
+          <input type="number" id="grasa" step="0.1" placeholder="ej. 24.5">
         </div>
         <div class="campo">
-          <label for="peso-prom">Peso promedio (últimos 7 días)</label>
-          <input type="number" id="peso-prom" step="0.1" required>
+          <label for="masa-muscular">Masa muscular (opcional)</label>
+          <input type="number" id="masa-muscular" step="0.1" placeholder="ej. 45.0">
         </div>
       </div>
-      <p style="font-size:0.78rem;color:var(--texto-suave);margin:-4px 0 0;">Usa la misma unidad en ambos (kg o lb), no importa cuál mientras sea consistente. Asumimos un ciclo típico de 28 días para estimar la fase y el próximo período.</p>
+      <p style="font-size:0.78rem;color:var(--texto-suave);margin:-4px 0 0;">El peso y la composición corporal son opcionales — la herramienta funciona igual si no te pesas hoy. Asumimos un ciclo típico de 28 días para estimar la fase (es una estimación, no un diagnóstico).</p>
     </fieldset>
 
     <fieldset>
@@ -222,6 +222,15 @@
           <div class="opcion" data-valor="No">No</div>
           <div class="opcion" data-valor="Un poco">Un poco</div>
           <div class="opcion" data-valor="Sí">Sí</div>
+        </div>
+      </div>
+      <div class="campo">
+        <label>¿Tuviste mareo o vértigo hoy?</label>
+        <div class="grupo-botones" data-grupo="mareo">
+          <div class="opcion activo" data-valor="No">No</div>
+          <div class="opcion" data-valor="Leve">Leve</div>
+          <div class="opcion" data-valor="Moderado">Moderado</div>
+          <div class="opcion" data-valor="Intenso">Intenso</div>
         </div>
       </div>
       <div class="campo">
@@ -311,11 +320,11 @@ function valorGrupo(nombre){
   return activo ? activo.dataset.valor : null;
 }
 
-// --- Fase del ciclo (modelo simple de 28 días) ---
+// --- Fase del ciclo (modelo simple de 28 días) — siempre una ESTIMACIÓN, nunca una afirmación ---
 function faseCiclo(dia){
   if (dia <= 5)  return {id:'menstrual',  nombre:'Menstrual'};
   if (dia <= 13) return {id:'folicular',  nombre:'Folicular'};
-  if (dia <= 16) return {id:'ovulacion',  nombre:'Ovulación'};
+  if (dia <= 16) return {id:'ovulacion',  nombre:'Ventana de ovulación'};
   return {id:'lutea', nombre:'Lútea'};
 }
 
@@ -345,30 +354,24 @@ function textoProximoPeriodo(diaCiclo){
   return 'Próximo período esperado: ' + fechaTexto + ' (en ' + r.diasRestantes + ' día' + (r.diasRestantes === 1 ? '' : 's') + ', asumiendo un ciclo de ' + DURACION_CICLO_ASUMIDA + ' días).';
 }
 
-// --- Interpretación del cambio de peso ---
-function interpretarPeso(pesoHoy, pesoProm, fase, hambre){
-  var diff = Math.round((pesoHoy - pesoProm) * 10) / 10;
-  var abs = Math.abs(diff);
+// --- Cuerpo: peso / % grasa / masa muscular son opcionales, y no se comparan contra nada ---
+// Interpretación, no diagnóstico: un solo dato no dice si hay tendencia.
+function resumenCuerpo(pesoHoy, grasa, masaMuscular){
+  var partes = [];
+  if (pesoHoy !== null)      partes.push('peso ' + pesoHoy);
+  if (grasa !== null)        partes.push('% grasa ' + grasa + '%');
+  if (masaMuscular !== null) partes.push('masa muscular ' + masaMuscular);
 
-  if (abs < 0.3) {
-    return 'Tu peso de hoy (' + pesoHoy + ') está prácticamente igual a tu promedio reciente (' + pesoProm + '). Sin cambios relevantes.';
+  if (partes.length === 0) {
+    return 'No registraste peso ni composición corporal hoy — no hace falta, la recomendación de hoy no depende de eso.';
   }
-  if (diff > 0) {
-    if (fase.id === 'lutea' || fase.id === 'menstrual') {
-      var texto = 'Subiste ' + abs + ' respecto a tu promedio. En fase ' + fase.nombre.toLowerCase() + ' esto suele ser retención de líquidos, no grasa — no hace falta reaccionar todavía.';
-      if (hambre === 'Alta') {
-        texto += ' Con el hambre también más alta de lo normal, es aún más probable que sea una fluctuación temporal: no lo interpretes automáticamente como ganancia de grasa.';
-      }
-      return texto;
-    }
-    return 'Subiste ' + abs + ' respecto a tu promedio. En fase ' + fase.nombre.toLowerCase() + ' hay menos retención hormonal, así que vale la pena seguir observando los próximos días antes de sacar conclusiones.';
-  }
-  return 'Bajaste ' + abs + ' respecto a tu promedio. Es un dato normal día a día — no saques conclusiones de una sola medición.';
+  return 'Datos de hoy: ' + partes.join(', ') + '. Un solo dato no permite saber si hay una tendencia real — sin una medición anterior con la que comparar, evita sacar conclusiones (por ejemplo, no asumas que es grasa ganada o perdida).';
 }
 
-// --- Ventana del ciclo: contextualiza, no manda por sí sola ---
+// --- Fase del ciclo: contextualiza, no manda por sí sola ni afirma nada ---
 function textoVentanaCiclo(fase){
-  return 'Ventana del ciclo estimada: fase ' + fase.nombre.toLowerCase() + '. Algunas mujeres pueden experimentar cambios en energía, apetito, sueño o peso durante esta etapa. Ajusta según cómo te sientas hoy.';
+  return 'Fase estimada: ' + fase.nombre.toLowerCase() + '. Algunas mujeres pueden experimentar cambios en energía, apetito, sueño o peso durante esta etapa. Ajusta según cómo te sientas hoy.' +
+    '<br><small style="color:var(--texto-suave);">La fase es una estimación basada en las fechas registradas, no un diagnóstico.</small>';
 }
 
 // --- REGLA 2: categoriza el texto libre de un entrenamiento ---
@@ -418,6 +421,21 @@ function decidirDolor(dolor, afecta, zonaParticipa){
   return {nivel:'recuperacion-total'}; // dolor === 'Alta', cualquier movimiento
 }
 
+// --- Mareo/vértigo: otro override de seguridad, independiente del dolor ---
+function decidirMareo(mareo){
+  if (mareo === 'Intenso')  return {nivel:'recuperacion-total'};
+  if (mareo === 'Moderado') return {nivel:'recuperacion-parcial'};
+  if (mareo === 'Leve')     return {nivel:'seguir-precaucion'};
+  return {nivel:'seguir'};
+}
+
+// --- Se toma el nivel más restrictivo entre dolor y mareo ---
+var SEVERIDAD_NIVEL = {'seguir':0, 'seguir-precaucion':1, 'modificar':2, 'recuperacion-parcial':3, 'recuperacion-total':4};
+
+function peorNivel(a, b){
+  return SEVERIDAD_NIVEL[a] >= SEVERIDAD_NIVEL[b] ? a : b;
+}
+
 // --- REGLA 4: recuperación a partir de energía, sueño y estrés ---
 function evaluarRecuperacion(energia, sueno, estres){
   var señales = 0;
@@ -427,39 +445,51 @@ function evaluarRecuperacion(energia, sueno, estres){
   return {comprometida: señales >= 2, señales: señales};
 }
 
-// --- REGLA 3: pasos con semáforo, no meta fija ---
-function evaluarPasos(pasos, categoriaHoy, dolorNivel, recuperacionComprometida){
-  if (dolorNivel === 'recuperacion-total') {
-    return {nivel:'rojo', texto:'🔴 Ya tienes suficiente carga hoy — prioriza recuperación en vez de sumar más pasos.'};
+// --- REGLA 3: pasos con semáforo, no meta fija (nunca decimos "tu objetivo son X pasos") ---
+function evaluarPasos(pasos, categoriaHoy, nivelGeneral, recuperacionComprometida){
+  if (nivelGeneral === 'recuperacion-total') {
+    return {nivel:'rojo', texto:'🔴 Ya tienes suficiente carga hoy — prioriza recuperación y no añadas caminata estructurada.'};
   }
-  if ((dolorNivel === 'recuperacion-parcial' || recuperacionComprometida) && pasos >= 5000) {
+  if ((nivelGeneral === 'recuperacion-parcial' || recuperacionComprometida) && pasos >= 5000) {
     return {nivel:'rojo', texto:'🔴 Ya tienes suficiente carga hoy. Prioriza recuperación en lugar de agregar una caminata.'};
   }
   if (pasos >= 8000) {
-    return {nivel:'verde', texto:'🟢 Ya acumulaste bastante actividad hoy. No necesitas perseguir más pasos.'};
+    return {nivel:'verde', texto:'🟢 Ya llevas ' + pasos.toLocaleString('es') + ' pasos hoy — no necesitas más caminata.'};
   }
   if (categoriaHoy === 'pierna' && pasos >= 7000) {
-    return {nivel:'verde', texto:'🟢 Ya tienes suficiente actividad para hoy. No necesitas una caminata adicional.'};
+    return {nivel:'verde', texto:'🟢 Ya llevas ' + pasos.toLocaleString('es') + ' pasos hoy. No necesitas una caminata adicional.'};
   }
   if (categoriaHoy === 'pierna' || categoriaHoy === 'cardio') {
-    return {nivel:'amarillo', texto:'🟡 Puedes sumar una caminata suave de 10–20 min si te apetece — no es necesaria para "compensar" el entrenamiento.'};
+    return {nivel:'amarillo', texto:'🟡 Puedes agregar 10–15 minutos de caminata suave si quieres — no es necesaria para "compensar" el entrenamiento.'};
   }
-  return {nivel:'amarillo', texto:'🟡 Si quieres moverte más, una caminata suave de 15–20 min sería una buena forma de completar tu actividad de hoy.'};
+  return {nivel:'amarillo', texto:'🟡 Puedes agregar 10–15 minutos de caminata suave si quieres, como forma de completar tu actividad de hoy.'};
 }
 
-// --- Bullet principal: fusiona REGLA 1 (dolor) + REGLA 2 (entrenamiento) ---
-function construirBulletEntrenamiento(datos, categoriaHoy, dolorInfo, zonaParticipa){
+// --- Bullet principal: fusiona REGLA 1 (dolor + mareo) + REGLA 2 (entrenamiento) ---
+function construirBulletEntrenamiento(datos, categoriaHoy, dolorInfo, mareoInfo, zonaParticipa){
   var entrenoTxt = datos.entrenoHoy || 'tu plan de hoy';
   var zonaTxt = datos.zona ? datos.zona.toLowerCase() : 'la zona con molestia';
+  var nivel = peorNivel(dolorInfo.nivel, mareoInfo.nivel);
+  // ¿el mareo es igual o más severo que el dolor? entonces el mensaje habla de mareo, no de zona
+  var porMareo = datos.mareo !== 'No' && SEVERIDAD_NIVEL[mareoInfo.nivel] >= SEVERIDAD_NIVEL[dolorInfo.nivel];
 
-  switch (dolorInfo.nivel) {
+  switch (nivel) {
     case 'recuperacion-total':
+      if (porMareo) {
+        return 'No se recomienda entrenar hoy por el mareo/vértigo — prioriza reposo, hidratación y movimientos lentos. Si no mejora, busca atención médica.';
+      }
       return 'No se recomienda entrenamiento intenso hoy — prioriza recuperación: movilidad, estiramientos suaves o una caminata corta.';
     case 'recuperacion-parcial':
+      if (porMareo) {
+        return 'Reduce la intensidad de "' + entrenoTxt + '" por el mareo/vértigo — evita cambios bruscos de posición y ejercicios de alto impacto.';
+      }
       return 'Reduce volumen e intensidad de "' + entrenoTxt + '" y prioriza recuperación en ' + zonaTxt + '.';
     case 'modificar':
       return 'Modifica el entrenamiento de hoy (' + entrenoTxt + '): reduce carga/volumen y evita movimientos que aumenten la molestia en ' + zonaTxt + '. Si el dolor empeora, detén el ejercicio.';
     case 'seguir-precaucion':
+      if (porMareo) {
+        return 'Puedes mantener tu entrenamiento de hoy (' + entrenoTxt + '), pero evita cambios bruscos de posición mientras sientas mareo leve.';
+      }
       return 'Puedes mantener tu entrenamiento de hoy (' + entrenoTxt + '). Evita ejercicios que provoquen molestia en ' + zonaTxt + '.';
     default: // 'seguir'
       if (categoriaHoy === 'descanso') {
@@ -477,94 +507,103 @@ function construirBulletObjetivo(objetivo){
   return 'Objetivo salud: prioriza cómo te sientes por encima del rendimiento — la consistencia importa más que la intensidad.';
 }
 
-// --- No hacer ---
-function construirNoHacer(datos, categoriaAyer, dolorInfo, zonaParticipa, pasosInfo){
+// --- No hacer — candidatos en orden de prioridad, se recortan a máximo 2 ---
+function construirNoHacer(datos, categoriaAyer, dolorInfo, mareoInfo, pasosInfo){
   var noHacer = [];
   var zonaTxt = datos.zona ? datos.zona.toLowerCase() : 'la zona con molestia';
+  var nivel = peorNivel(dolorInfo.nivel, mareoInfo.nivel);
+  var porMareo = datos.mareo !== 'No' && SEVERIDAD_NIVEL[mareoInfo.nivel] >= SEVERIDAD_NIVEL[dolorInfo.nivel];
 
-  if (dolorInfo.nivel === 'recuperacion-total') {
-    noHacer.push('No hagas entrenamiento intenso ni cargues peso hoy.');
-    noHacer.push('No ignores una molestia alta — si no mejora en uno o dos días, consulta a un profesional.');
-  } else if (dolorInfo.nivel === 'recuperacion-parcial') {
-    noHacer.push('No mantengas el volumen o intensidad habitual — no cargues peso directamente sobre ' + zonaTxt + '.');
-  } else if (dolorInfo.nivel === 'modificar') {
+  // 1. Seguridad: dolor y/o mareo (una sola línea, la más restrictiva)
+  if (nivel === 'recuperacion-total') {
+    noHacer.push(porMareo
+      ? 'No entrenes con intensidad mientras el mareo persista — evita cambios bruscos de posición y, si no mejora, consulta a un profesional.'
+      : 'No cargues peso ni fuerces el entrenamiento — si la molestia no mejora en uno o dos días, consulta a un profesional.');
+  } else if (nivel === 'recuperacion-parcial') {
+    noHacer.push(porMareo
+      ? 'No hagas ejercicios de alto impacto o cambios bruscos de posición mientras sientas mareo.'
+      : 'No mantengas el volumen o intensidad habitual — no cargues peso directamente sobre ' + zonaTxt + '.');
+  } else if (nivel === 'modificar') {
     noHacer.push('No hagas los movimientos de tu rutina que carguen directamente ' + zonaTxt + '.');
-  } else if (dolorInfo.nivel === 'seguir-precaucion') {
-    noHacer.push('No ignores la molestia en ' + zonaTxt + ' aunque no forme parte de tu plan de hoy — evita provocarla a propósito.');
+  } else if (nivel === 'seguir-precaucion') {
+    noHacer.push(porMareo
+      ? 'No ignores el mareo leve — evita levantarte rápido o hacer movimientos bruscos.'
+      : 'No ignores la molestia en ' + zonaTxt + ' aunque no forme parte de tu plan de hoy — evita provocarla a propósito.');
   }
 
+  // 2. Pasos en rojo
   if (pasosInfo.nivel === 'rojo') {
     noHacer.push('No agregues una caminata "para sumar más" — ya tienes suficiente carga hoy.');
   }
 
+  // 3. Cardio de ayer
   if (categoriaAyer === 'cardio') {
     noHacer.push('No agregues cardio adicional hoy — ayer ya fue un día de cardio intenso.');
   }
 
+  // 4. Estrés alto
   if (datos.estres === 'Alto') {
     noHacer.push('No agregues más estrés con un entrenamiento de muy alta intensidad hoy.');
   }
 
+  // 5. Objetivo (más específico primero)
   if (datos.hambre === 'Alta' && datos.objetivo === 'Pérdida de grasa') {
-    noHacer.push('No te saltes comidas para "compensar" el hambre de hoy — sostienes mejor el déficit con suficiente proteína y fibra que restringiendo de más.');
-  }
-  if (datos.objetivo === 'Recomposición') {
+    noHacer.push('No te saltes comidas para "compensar" el hambre de hoy.');
+  } else if (datos.objetivo === 'Recomposición') {
     noHacer.push('No saltes proteína aunque el entrenamiento de hoy sea ligero.');
-  }
-  if (datos.objetivo === 'Pérdida de grasa') {
+  } else if (datos.objetivo === 'Pérdida de grasa') {
     noHacer.push('No uses el número de la báscula de hoy para restringir más la comida.');
   }
 
-  noHacer.push('No compares el peso de hoy con el de ayer como si fuera grasa ganada o perdida en 24 horas.');
-  if (datos.grasa) {
-    noHacer.push('No sobreinterpretes el % de grasa de un solo día — las básculas de bioimpedancia varían con hidratación y hora del día.');
+  // 6. Relleno de baja prioridad, solo si hay peso/grasa/masa registrados
+  if (datos.pesoHoy !== null || datos.grasa !== null || datos.masaMuscular !== null) {
+    noHacer.push('No saques conclusiones de un solo dato de peso o composición corporal.');
   }
 
   return noHacer;
 }
 
 // --- Generación del plan de hoy ---
-// Prioridad: 1. Dolor -> 2. Entrenamiento -> 3. Pasos -> 4. Recuperación -> 5. Ciclo (solo contextual) -> 6. Objetivo
+// Prioridad: 1. Dolor/mareo -> 2. Entrenamiento -> 3. Pasos -> 4. Recuperación -> 5. Ciclo (solo contextual) -> 6. Objetivo
+// "Qué hacer hoy": máximo 3 acciones. "Qué no hacer": máximo 2.
 function generarPlan(datos){
   var categoriaHoy  = categorizarEntreno(datos.entrenoHoy);
   var categoriaAyer = categorizarEntreno(datos.entrenoAyer);
   var zonaParticipa = zonaParticipaEnEntreno(categoriaHoy, datos.zona);
 
   var dolorInfo     = decidirDolor(datos.dolor, datos.afecta, zonaParticipa);
+  var mareoInfo     = decidirMareo(datos.mareo);
+  var nivelGeneral  = peorNivel(dolorInfo.nivel, mareoInfo.nivel);
   var recuperacion  = evaluarRecuperacion(datos.energia, datos.sueno, datos.estres);
-  var pasosInfo     = evaluarPasos(datos.pasos, categoriaHoy, dolorInfo.nivel, recuperacion.comprometida);
+  var pasosInfo     = evaluarPasos(datos.pasos, categoriaHoy, nivelGeneral, recuperacion.comprometida);
 
-  // "Qué hacer hoy" — máximo 4 bullets, en orden de prioridad
-  var hacer = [];
+  // "Qué hacer hoy" — máximo 3 bullets, en orden de prioridad
+  // 1. Dolor/mareo + entrenamiento (siempre presente)
+  var hacer = [construirBulletEntrenamiento(datos, categoriaHoy, dolorInfo, mareoInfo, zonaParticipa)];
 
-  // 1+2. Dolor + entrenamiento (combinados: el dolor modifica cómo se presenta el entrenamiento)
-  hacer.push(construirBulletEntrenamiento(datos, categoriaHoy, dolorInfo, zonaParticipa));
-
-  // 3. Pasos
+  // 2. Pasos (siempre presente)
   hacer.push(pasosInfo.texto);
 
-  // 4. Recuperación (solo si está comprometida — dos o más señales)
+  // 3. Un único bullet de relleno, por prioridad: recuperación comprometida > carga acumulada > objetivo
+  var ayerExigente = ['pierna','upper','cardio'].indexOf(categoriaAyer) !== -1;
+  var cargaAcumulada = categoriaAyer === categoriaHoy && ['descanso','otro','sin-especificar'].indexOf(categoriaHoy) === -1 && nivelGeneral === 'seguir';
+
   if (recuperacion.comprometida) {
-    var ayerExigente = ['pierna','upper','cardio'].indexOf(categoriaAyer) !== -1;
     hacer.push(
       'Tu recuperación está algo comprometida hoy (energía, sueño o estrés fuera de lo habitual)' +
       (ayerExigente ? ', y ayer entrenaste ' + datos.entrenoAyer + '.' : '.') +
       ' Reduce intensidad o volumen aunque no haya dolor de por medio.'
     );
-  }
-
-  // Carga acumulada: mismo grupo muscular ayer y hoy, sin dolor de por medio
-  if (categoriaAyer === categoriaHoy && ['descanso','otro','sin-especificar'].indexOf(categoriaHoy) === -1 && dolorInfo.nivel === 'seguir') {
+  } else if (cargaAcumulada) {
     hacer.push('Ayer también entrenaste ' + datos.entrenoAyer + ' — hay carga acumulada en la misma zona; ajusta el volumen si lo sientes necesario.');
+  } else {
+    hacer.push(construirBulletObjetivo(datos.objetivo));
   }
 
-  // 6. Objetivo (relleno de menor prioridad — se recorta primero si ya hay 4 bullets)
-  hacer.push(construirBulletObjetivo(datos.objetivo));
+  hacer = hacer.slice(0, 3);
 
-  hacer = hacer.slice(0, 4);
-
-  // "Qué no hacer"
-  var noHacer = construirNoHacer(datos, categoriaAyer, dolorInfo, zonaParticipa, pasosInfo);
+  // "Qué no hacer" — máximo 2, en orden de prioridad
+  var noHacer = construirNoHacer(datos, categoriaAyer, dolorInfo, mareoInfo, pasosInfo).slice(0, 2);
 
   return {hacer: hacer, noHacer: noHacer};
 }
@@ -573,10 +612,12 @@ document.getElementById('form-checkin').addEventListener('submit', function(e){
   e.preventDefault();
 
   var diaCiclo = parseInt(document.getElementById('dia-ciclo').value, 10);
-  var pesoHoy  = parseFloat(document.getElementById('peso-hoy').value);
-  var pesoProm = parseFloat(document.getElementById('peso-prom').value);
+  var pesoVal  = document.getElementById('peso-hoy').value;
+  var pesoHoy  = pesoVal !== '' ? parseFloat(pesoVal) : null;
   var grasaVal = document.getElementById('grasa').value;
   var grasa    = grasaVal !== '' ? parseFloat(grasaVal) : null;
+  var masaVal  = document.getElementById('masa-muscular').value;
+  var masaMuscular = masaVal !== '' ? parseFloat(masaVal) : null;
   var pasos    = parseInt(document.getElementById('pasos').value, 10) || 0;
   var entrenoHoy  = document.getElementById('entreno-hoy').value.trim();
   var entrenoAyer = document.getElementById('entreno-ayer').value.trim();
@@ -586,6 +627,7 @@ document.getElementById('form-checkin').addEventListener('submit', function(e){
   var dolor   = valorGrupo('dolor');
   var zona    = dolor !== 'Ninguna' ? valorGrupo('zona')   : null;
   var afecta  = dolor !== 'Ninguna' ? valorGrupo('afecta') : null;
+  var mareo   = valorGrupo('mareo');
   var sueno   = valorGrupo('sueno');
   var hambre  = valorGrupo('hambre');
   var estres  = valorGrupo('estres');
@@ -593,28 +635,31 @@ document.getElementById('form-checkin').addEventListener('submit', function(e){
   var fase = faseCiclo(diaCiclo);
 
   var datos = {
-    diaCiclo: diaCiclo, pesoHoy: pesoHoy, pesoProm: pesoProm, grasa: grasa,
+    diaCiclo: diaCiclo, pesoHoy: pesoHoy, grasa: grasa, masaMuscular: masaMuscular,
     pasos: pasos, entrenoHoy: entrenoHoy, entrenoAyer: entrenoAyer,
-    energia: energia, dolor: dolor, zona: zona, afecta: afecta, sueno: sueno,
+    energia: energia, dolor: dolor, zona: zona, afecta: afecta, mareo: mareo, sueno: sueno,
     hambre: hambre, estres: estres, objetivo: objetivo, fase: fase
   };
 
-  // --- Qué está pasando ---
+  // --- Qué está pasando (interpretación, no diagnóstico) ---
   var parrafos = [];
-  parrafos.push('<p>' + interpretarPeso(pesoHoy, pesoProm, fase, hambre) + '</p>');
+  parrafos.push('<p>' + resumenCuerpo(pesoHoy, grasa, masaMuscular) + '</p>');
   parrafos.push('<p>' + textoVentanaCiclo(fase) + '</p>');
 
-  var resumenActividad = 'Día ' + diaCiclo + ' del ciclo (fase ' + fase.nombre.toLowerCase() + '). ';
+  var resumenActividad = 'Día ' + diaCiclo + ' del ciclo. ';
   resumenActividad += 'Ayer: ' + (entrenoAyer || 'sin registro') + '. Hoy llevas ' + pasos.toLocaleString('es') + ' pasos.';
   parrafos.push('<p>' + resumenActividad + '</p>');
 
+  var comoTeSientes = 'Energía ' + energia.toLowerCase() + ', sueño ' + sueno.toLowerCase() + ', hambre ' + hambre.toLowerCase() + ', estrés ' + estres.toLowerCase() + '.';
   if (dolor !== 'Ninguna') {
     var zonaTxt   = zona   || 'sin especificar';
     var afectaTxt = afecta || 'sin especificar';
-    parrafos.push('<p>Hoy reportas una molestia de nivel <strong>' + dolor.toLowerCase() + '</strong> en <strong>' + zonaTxt.toLowerCase() + '</strong>. ¿Afecta tu movimiento? ' + afectaTxt.toLowerCase() + '. Energía ' + energia.toLowerCase() + ', sueño ' + sueno.toLowerCase() + ', hambre ' + hambre.toLowerCase() + ' y estrés ' + estres.toLowerCase() + '.</p>');
-  } else {
-    parrafos.push('<p>Sin molestias reportadas. Energía ' + energia.toLowerCase() + ', sueño ' + sueno.toLowerCase() + ', hambre ' + hambre.toLowerCase() + ' y estrés ' + estres.toLowerCase() + '.</p>');
+    comoTeSientes = 'Molestia de nivel <strong>' + dolor.toLowerCase() + '</strong> en <strong>' + zonaTxt.toLowerCase() + '</strong> (¿afecta tu movimiento? ' + afectaTxt.toLowerCase() + '). ' + comoTeSientes;
   }
+  if (mareo !== 'No') {
+    comoTeSientes += ' Mareo/vértigo: ' + mareo.toLowerCase() + '.';
+  }
+  parrafos.push('<p>' + comoTeSientes + '</p>');
 
   document.getElementById('txt-pasando').innerHTML = parrafos.join('');
   document.getElementById('badge-fase').textContent = fase.nombre;
@@ -627,7 +672,11 @@ document.getElementById('form-checkin').addEventListener('submit', function(e){
   listaHacer.innerHTML = plan.hacer.map(function(t){ return '<li>' + t + '</li>'; }).join('');
 
   var listaNoHacer = document.getElementById('lista-no-hacer');
-  listaNoHacer.innerHTML = plan.noHacer.map(function(t){ return '<li>' + t + '</li>'; }).join('');
+  if (plan.noHacer.length === 0) {
+    listaNoHacer.innerHTML = '<li>Sin contraindicaciones específicas hoy — sigue tu plan con normalidad.</li>';
+  } else {
+    listaNoHacer.innerHTML = plan.noHacer.map(function(t){ return '<li>' + t + '</li>'; }).join('');
+  }
 
   document.getElementById('resultado').style.display = 'block';
   document.getElementById('resultado').scrollIntoView({behavior:'smooth', block:'start'});
