@@ -262,7 +262,7 @@
       </div>
     </fieldset>
 
-    <button type="submit" class="principal">Ver mi resumen de hoy</button>
+    <button type="submit" class="principal">¿Qué hacer hoy?</button>
   </form>
 
   <div id="resultado">
@@ -346,7 +346,7 @@ function textoProximoPeriodo(diaCiclo){
 }
 
 // --- Interpretación del cambio de peso ---
-function interpretarPeso(pesoHoy, pesoProm, fase){
+function interpretarPeso(pesoHoy, pesoProm, fase, hambre){
   var diff = Math.round((pesoHoy - pesoProm) * 10) / 10;
   var abs = Math.abs(diff);
 
@@ -355,96 +355,216 @@ function interpretarPeso(pesoHoy, pesoProm, fase){
   }
   if (diff > 0) {
     if (fase.id === 'lutea' || fase.id === 'menstrual') {
-      return 'Subiste ' + abs + ' respecto a tu promedio. En fase ' + fase.nombre.toLowerCase() + ' esto suele ser retención de líquidos, no grasa — no hace falta reaccionar todavía.';
+      var texto = 'Subiste ' + abs + ' respecto a tu promedio. En fase ' + fase.nombre.toLowerCase() + ' esto suele ser retención de líquidos, no grasa — no hace falta reaccionar todavía.';
+      if (hambre === 'Alta') {
+        texto += ' Con el hambre también más alta de lo normal, es aún más probable que sea una fluctuación temporal: no lo interpretes automáticamente como ganancia de grasa.';
+      }
+      return texto;
     }
     return 'Subiste ' + abs + ' respecto a tu promedio. En fase ' + fase.nombre.toLowerCase() + ' hay menos retención hormonal, así que vale la pena seguir observando los próximos días antes de sacar conclusiones.';
   }
   return 'Bajaste ' + abs + ' respecto a tu promedio. Es un dato normal día a día — no saques conclusiones de una sola medición.';
 }
 
-// --- Generación del plan de hoy ---
-function generarPlan(datos){
-  var hacer = [];
-  var noHacer = [];
-  var recorte = false;
-  var motivos = [];
+// --- Ventana del ciclo: contextualiza, no manda por sí sola ---
+function textoVentanaCiclo(fase){
+  return 'Ventana del ciclo estimada: fase ' + fase.nombre.toLowerCase() + '. Algunas mujeres pueden experimentar cambios en energía, apetito, sueño o peso durante esta etapa. Ajusta según cómo te sientas hoy.';
+}
 
-  if (datos.dolor === 'Alta')    { recorte = true; motivos.push('molestia alta'); }
-  if (datos.dolor === 'Moderada'){ recorte = true; motivos.push('molestia moderada'); }
-  if (datos.dolor === 'Leve' && datos.afecta === 'Sí') { recorte = true; motivos.push('molestia leve que sí afecta el movimiento'); }
-  if (datos.energia === 'Baja' && datos.sueno === 'Malo') { recorte = true; motivos.push('poca energía y mal descanso'); }
-  if (datos.fase.id === 'menstrual' && datos.energia === 'Baja') { recorte = true; motivos.push('inicio del ciclo con energía baja'); }
-  if (datos.estres === 'Alto') { recorte = true; motivos.push('estrés alto'); }
+// --- REGLA 2: categoriza el texto libre de un entrenamiento ---
+function categorizarEntreno(texto){
+  if (!texto) return 'sin-especificar';
+  var t = texto.toLowerCase();
+  var contiene = function(palabras){ return palabras.some(function(p){ return t.indexOf(p) !== -1; }); };
 
-  if (recorte) {
-    hacer.push('Prioriza recuperación: movilidad, estiramientos suaves o una caminata corta.');
-    hacer.push('Mantén el movimiento ligero — no es necesario parar del todo, pero baja la intensidad de "' + (datos.entrenoHoy || 'tu plan de hoy') + '".');
-    noHacer.push('No fuerces el entrenamiento planeado solo porque estaba en el calendario (' + motivos.join(', ') + ').');
-    if (datos.dolor === 'Alta' || datos.dolor === 'Moderada' || (datos.dolor === 'Leve' && datos.afecta === 'Sí')) {
-      var zonaTexto = datos.zona ? datos.zona.toLowerCase() : 'la zona con molestia';
-      noHacer.push('No cargues peso ni entrenes directamente sobre ' + zonaTexto + '.');
-      if (datos.afecta === 'Sí') {
-        noHacer.push('No ignores que la molestia te está afectando el movimiento — si no mejora en unos días, consulta a un profesional.');
+  if (contiene(['descanso','rest','libre','off'])) return 'descanso';
+  if (contiene(['pierna','glute','gluteo','glúteo','sentadilla','squat','leg','cuadriceps','cuádriceps','isquio'])) return 'pierna';
+  if (contiene(['upper','empuje','jalón','jalon','pull','push','pecho','hombro','espalda','triceps','tríceps','biceps','bíceps','brazo'])) return 'upper';
+  if (contiene(['core','abdomen','abs','plancha'])) return 'core';
+  if (contiene(['cardio','correr','bici','spinning','hiit','caminata'])) return 'cardio';
+  return 'otro';
+}
+
+// --- Qué zonas participan típicamente en cada categoría de entrenamiento ---
+var ZONAS_POR_CATEGORIA = {
+  'pierna': ['Cadera','Rodilla','Tobillo/pie'],
+  'upper': ['Hombro','Cuello','Espalda'],
+  'core': ['Espalda','Cadera'],
+  'cardio': ['Cadera','Rodilla','Tobillo/pie'],
+  'descanso': []
+  // 'otro' y 'sin-especificar' no están listados a propósito: se tratan como desconocidos (ver abajo)
+};
+
+function zonaParticipaEnEntreno(categoria, zona){
+  if (!zona) return false;
+  if (zona === 'Otra') return true; // no sabemos qué es "otra", mejor pecar de cautelosas
+  var lista = ZONAS_POR_CATEGORIA[categoria];
+  if (!lista) return true; // categoría desconocida -> cautelosas también
+  return lista.indexOf(zona) !== -1;
+}
+
+// --- REGLA 1: el dolor como override principal ---
+function decidirDolor(dolor, afecta, zonaParticipa){
+  if (dolor === 'Ninguna') return {nivel:'seguir'};
+  if (dolor === 'Leve') {
+    if (afecta === 'No') return {nivel:'seguir'};
+    // afecta 'Un poco' o 'Sí'
+    return {nivel: zonaParticipa ? 'modificar' : 'seguir-precaucion'};
+  }
+  if (dolor === 'Moderada') {
+    if (afecta === 'No') return {nivel: zonaParticipa ? 'modificar' : 'seguir-precaucion'};
+    return {nivel:'recuperacion-parcial'}; // 'Un poco' o 'Sí'
+  }
+  return {nivel:'recuperacion-total'}; // dolor === 'Alta', cualquier movimiento
+}
+
+// --- REGLA 4: recuperación a partir de energía, sueño y estrés ---
+function evaluarRecuperacion(energia, sueno, estres){
+  var señales = 0;
+  if (energia === 'Baja') señales++;
+  if (sueno === 'Malo') señales++;
+  if (estres === 'Alto') señales++;
+  return {comprometida: señales >= 2, señales: señales};
+}
+
+// --- REGLA 3: pasos con semáforo, no meta fija ---
+function evaluarPasos(pasos, categoriaHoy, dolorNivel, recuperacionComprometida){
+  if (dolorNivel === 'recuperacion-total') {
+    return {nivel:'rojo', texto:'🔴 Ya tienes suficiente carga hoy — prioriza recuperación en vez de sumar más pasos.'};
+  }
+  if ((dolorNivel === 'recuperacion-parcial' || recuperacionComprometida) && pasos >= 5000) {
+    return {nivel:'rojo', texto:'🔴 Ya tienes suficiente carga hoy. Prioriza recuperación en lugar de agregar una caminata.'};
+  }
+  if (pasos >= 8000) {
+    return {nivel:'verde', texto:'🟢 Ya acumulaste bastante actividad hoy. No necesitas perseguir más pasos.'};
+  }
+  if (categoriaHoy === 'pierna' && pasos >= 7000) {
+    return {nivel:'verde', texto:'🟢 Ya tienes suficiente actividad para hoy. No necesitas una caminata adicional.'};
+  }
+  if (categoriaHoy === 'pierna' || categoriaHoy === 'cardio') {
+    return {nivel:'amarillo', texto:'🟡 Puedes sumar una caminata suave de 10–20 min si te apetece — no es necesaria para "compensar" el entrenamiento.'};
+  }
+  return {nivel:'amarillo', texto:'🟡 Si quieres moverte más, una caminata suave de 15–20 min sería una buena forma de completar tu actividad de hoy.'};
+}
+
+// --- Bullet principal: fusiona REGLA 1 (dolor) + REGLA 2 (entrenamiento) ---
+function construirBulletEntrenamiento(datos, categoriaHoy, dolorInfo, zonaParticipa){
+  var entrenoTxt = datos.entrenoHoy || 'tu plan de hoy';
+  var zonaTxt = datos.zona ? datos.zona.toLowerCase() : 'la zona con molestia';
+
+  switch (dolorInfo.nivel) {
+    case 'recuperacion-total':
+      return 'No se recomienda entrenamiento intenso hoy — prioriza recuperación: movilidad, estiramientos suaves o una caminata corta.';
+    case 'recuperacion-parcial':
+      return 'Reduce volumen e intensidad de "' + entrenoTxt + '" y prioriza recuperación en ' + zonaTxt + '.';
+    case 'modificar':
+      return 'Modifica el entrenamiento de hoy (' + entrenoTxt + '): reduce carga/volumen y evita movimientos que aumenten la molestia en ' + zonaTxt + '. Si el dolor empeora, detén el ejercicio.';
+    case 'seguir-precaucion':
+      return 'Puedes mantener tu entrenamiento de hoy (' + entrenoTxt + '). Evita ejercicios que provoquen molestia en ' + zonaTxt + '.';
+    default: // 'seguir'
+      if (categoriaHoy === 'descanso') {
+        return 'Hoy tienes descanso planeado — no hace falta agregar entrenamiento extra.';
       }
-    }
-  } else {
-    if (datos.entrenoAyer && datos.entrenoHoy &&
-        datos.entrenoAyer.trim().toLowerCase() === datos.entrenoHoy.trim().toLowerCase()) {
-      hacer.push('Ayer y hoy coinciden en "' + datos.entrenoHoy + '". Si no hay dolor ni fatiga puedes mantenerlo, pero baja un poco el volumen para dar tiempo a recuperar.');
-    } else {
-      hacer.push('Puedes seguir con el plan de hoy: ' + (datos.entrenoHoy || 'según tu rutina') + '.');
-    }
-    if (datos.fase.id === 'folicular' || datos.fase.id === 'ovulacion') {
-      hacer.push('Fase ' + datos.fase.nombre.toLowerCase() + ': buen momento para exigirte un poco más si el cuerpo responde bien.');
-    }
-    if (datos.fase.id === 'lutea') {
-      hacer.push('Fase lútea: entrena con normalidad pero escucha señales de fatiga — no es el mejor momento para forzar récords.');
-    }
-    if (datos.fase.id === 'ovulacion') {
-      noHacer.push('No descuides la técnica: hay más laxitud articular en estos días.');
-    }
-    if (datos.dolor === 'Leve') {
-      var zonaLeve = datos.zona ? datos.zona.toLowerCase() : 'la zona';
-      hacer.push('Tienes una molestia leve en ' + zonaLeve + ' que por ahora no te limita el movimiento — entrena con normalidad pero mantente atenta a cómo evoluciona.');
-    }
+      return 'Sigue tu entrenamiento planeado de hoy: ' + entrenoTxt + '.';
+  }
+}
+
+// --- REGLA 7: el objetivo cambia el énfasis, nunca la seguridad ---
+function construirBulletObjetivo(objetivo){
+  if (objetivo === 'Pérdida de grasa') return 'Objetivo pérdida de grasa: mantén tu entrenamiento de fuerza y una actividad sostenible — no compenses la comida con más ejercicio.';
+  if (objetivo === 'Recomposición') return 'Objetivo recomposición: prioriza fuerza, recuperación y consistencia por encima de la intensidad puntual.';
+  if (objetivo === 'Mantenimiento') return 'Objetivo mantenimiento: prioriza tu rendimiento habitual y la recuperación, sin necesidad de forzar más.';
+  return 'Objetivo salud: prioriza cómo te sientes por encima del rendimiento — la consistencia importa más que la intensidad.';
+}
+
+// --- No hacer ---
+function construirNoHacer(datos, categoriaAyer, dolorInfo, zonaParticipa, pasosInfo){
+  var noHacer = [];
+  var zonaTxt = datos.zona ? datos.zona.toLowerCase() : 'la zona con molestia';
+
+  if (dolorInfo.nivel === 'recuperacion-total') {
+    noHacer.push('No hagas entrenamiento intenso ni cargues peso hoy.');
+    noHacer.push('No ignores una molestia alta — si no mejora en uno o dos días, consulta a un profesional.');
+  } else if (dolorInfo.nivel === 'recuperacion-parcial') {
+    noHacer.push('No mantengas el volumen o intensidad habitual — no cargues peso directamente sobre ' + zonaTxt + '.');
+  } else if (dolorInfo.nivel === 'modificar') {
+    noHacer.push('No hagas los movimientos de tu rutina que carguen directamente ' + zonaTxt + '.');
+  } else if (dolorInfo.nivel === 'seguir-precaucion') {
+    noHacer.push('No ignores la molestia en ' + zonaTxt + ' aunque no forme parte de tu plan de hoy — evita provocarla a propósito.');
   }
 
-  if (datos.pasos >= 8000) {
-    hacer.push('Llevas ' + datos.pasos.toLocaleString('es') + ' pasos hoy — buen nivel de actividad general, no necesitas forzar más volumen.');
+  if (pasosInfo.nivel === 'rojo') {
+    noHacer.push('No agregues una caminata "para sumar más" — ya tienes suficiente carga hoy.');
+  }
+
+  if (categoriaAyer === 'cardio') {
+    noHacer.push('No agregues cardio adicional hoy — ayer ya fue un día de cardio intenso.');
   }
 
   if (datos.estres === 'Alto') {
-    noHacer.push('No agregues más estrés con un entrenamiento de muy alta intensidad hoy — el cuerpo ya está manejando suficiente carga.');
+    noHacer.push('No agregues más estrés con un entrenamiento de muy alta intensidad hoy.');
   }
 
-  if (datos.hambre === 'Alta') {
-    if (datos.fase.id === 'lutea' || datos.fase.id === 'menstrual') {
-      hacer.push('Más hambre de lo normal es común en fase ' + datos.fase.nombre.toLowerCase() + ' por cambios hormonales; prioriza proteína y fibra para sentirte satisfecha.');
-    } else {
-      hacer.push('Si el hambre está más alta de lo normal, prioriza proteína y fibra en tus comidas de hoy.');
-    }
-    if (datos.objetivo === 'Pérdida de grasa') {
-      noHacer.push('No te saltes comidas para "compensar" el hambre de hoy — sostienes mejor el déficit comiendo suficiente proteína y fibra que restringiendo de más.');
-    }
-  } else if (datos.hambre === 'Baja') {
-    hacer.push('Aunque el hambre esté baja, no te saltes comidas por completo — sigue tu plan de alimentación.');
+  if (datos.hambre === 'Alta' && datos.objetivo === 'Pérdida de grasa') {
+    noHacer.push('No te saltes comidas para "compensar" el hambre de hoy — sostienes mejor el déficit con suficiente proteína y fibra que restringiendo de más.');
   }
-
-  if (datos.objetivo === 'Pérdida de grasa') {
-    hacer.push('Mantén tus pasos aunque el entrenamiento de hoy sea suave.');
-    noHacer.push('No uses el número de la báscula de hoy para restringir más la comida.');
-  } else if (datos.objetivo === 'Recomposición') {
+  if (datos.objetivo === 'Recomposición') {
     noHacer.push('No saltes proteína aunque el entrenamiento de hoy sea ligero.');
-  } else if (datos.objetivo === 'Mantenimiento') {
-    hacer.push('Prioriza la consistencia por encima de la intensidad puntual.');
-  } else if (datos.objetivo === 'Salud') {
-    hacer.push('El objetivo es sentirte bien, no rendir al máximo — ajusta según cómo te sientas hoy.');
+  }
+  if (datos.objetivo === 'Pérdida de grasa') {
+    noHacer.push('No uses el número de la báscula de hoy para restringir más la comida.');
   }
 
   noHacer.push('No compares el peso de hoy con el de ayer como si fuera grasa ganada o perdida en 24 horas.');
   if (datos.grasa) {
     noHacer.push('No sobreinterpretes el % de grasa de un solo día — las básculas de bioimpedancia varían con hidratación y hora del día.');
   }
+
+  return noHacer;
+}
+
+// --- Generación del plan de hoy ---
+// Prioridad: 1. Dolor -> 2. Entrenamiento -> 3. Pasos -> 4. Recuperación -> 5. Ciclo (solo contextual) -> 6. Objetivo
+function generarPlan(datos){
+  var categoriaHoy  = categorizarEntreno(datos.entrenoHoy);
+  var categoriaAyer = categorizarEntreno(datos.entrenoAyer);
+  var zonaParticipa = zonaParticipaEnEntreno(categoriaHoy, datos.zona);
+
+  var dolorInfo     = decidirDolor(datos.dolor, datos.afecta, zonaParticipa);
+  var recuperacion  = evaluarRecuperacion(datos.energia, datos.sueno, datos.estres);
+  var pasosInfo     = evaluarPasos(datos.pasos, categoriaHoy, dolorInfo.nivel, recuperacion.comprometida);
+
+  // "Qué hacer hoy" — máximo 4 bullets, en orden de prioridad
+  var hacer = [];
+
+  // 1+2. Dolor + entrenamiento (combinados: el dolor modifica cómo se presenta el entrenamiento)
+  hacer.push(construirBulletEntrenamiento(datos, categoriaHoy, dolorInfo, zonaParticipa));
+
+  // 3. Pasos
+  hacer.push(pasosInfo.texto);
+
+  // 4. Recuperación (solo si está comprometida — dos o más señales)
+  if (recuperacion.comprometida) {
+    var ayerExigente = ['pierna','upper','cardio'].indexOf(categoriaAyer) !== -1;
+    hacer.push(
+      'Tu recuperación está algo comprometida hoy (energía, sueño o estrés fuera de lo habitual)' +
+      (ayerExigente ? ', y ayer entrenaste ' + datos.entrenoAyer + '.' : '.') +
+      ' Reduce intensidad o volumen aunque no haya dolor de por medio.'
+    );
+  }
+
+  // Carga acumulada: mismo grupo muscular ayer y hoy, sin dolor de por medio
+  if (categoriaAyer === categoriaHoy && ['descanso','otro','sin-especificar'].indexOf(categoriaHoy) === -1 && dolorInfo.nivel === 'seguir') {
+    hacer.push('Ayer también entrenaste ' + datos.entrenoAyer + ' — hay carga acumulada en la misma zona; ajusta el volumen si lo sientes necesario.');
+  }
+
+  // 6. Objetivo (relleno de menor prioridad — se recorta primero si ya hay 4 bullets)
+  hacer.push(construirBulletObjetivo(datos.objetivo));
+
+  hacer = hacer.slice(0, 4);
+
+  // "Qué no hacer"
+  var noHacer = construirNoHacer(datos, categoriaAyer, dolorInfo, zonaParticipa, pasosInfo);
 
   return {hacer: hacer, noHacer: noHacer};
 }
@@ -481,7 +601,8 @@ document.getElementById('form-checkin').addEventListener('submit', function(e){
 
   // --- Qué está pasando ---
   var parrafos = [];
-  parrafos.push('<p>' + interpretarPeso(pesoHoy, pesoProm, fase) + '</p>');
+  parrafos.push('<p>' + interpretarPeso(pesoHoy, pesoProm, fase, hambre) + '</p>');
+  parrafos.push('<p>' + textoVentanaCiclo(fase) + '</p>');
 
   var resumenActividad = 'Día ' + diaCiclo + ' del ciclo (fase ' + fase.nombre.toLowerCase() + '). ';
   resumenActividad += 'Ayer: ' + (entrenoAyer || 'sin registro') + '. Hoy llevas ' + pasos.toLocaleString('es') + ' pasos.';
